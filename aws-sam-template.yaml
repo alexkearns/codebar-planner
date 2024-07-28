@@ -1,0 +1,313 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AWS Serverless Application Model template that deploys Lambda functions
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  DatabaseClusterIdentifier:
+    Type: String
+    Default: codebar-planner
+  DatabaseClusterMasterUsername:
+    Type: String
+    Default: dbadmin
+  RailsEnv:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - staging
+      - production
+  RailsLogLevel:
+    Type: String
+    Default: info
+    AllowedValues:
+      - debug
+      - info
+      - warn
+      - error
+
+Globals:
+  Api:
+    EndpointConfiguration: REGIONAL
+    Domain:
+      DomainName: !Sub ${RailsEnv}.codebar-aws.alexkearns.co.uk
+      CertificateArn: arn:aws:acm:eu-west-2:626836700067:certificate/60693d95-7d2e-4189-9de0-dc73bb5d8de9
+
+Resources:
+  # VPC and Gateways
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VpcIgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  NatGatewayAEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayAEip.AllocationId
+      SubnetId: !Ref PublicSubnetA
+  NatGatewayBEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayBEip.AllocationId
+      SubnetId: !Ref PublicSubnetB
+
+  # Public route table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Public subnets
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.0.0/21
+      AvailabilityZone: eu-west-2a
+      Tags:
+        - Key: Name
+          Value: codebar-public-a
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.8.0/21
+      AvailabilityZone: eu-west-2b
+      Tags:
+        - Key: Name
+          Value: codebar-public-b
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.16.0/21
+      AvailabilityZone: eu-west-2c
+      Tags:
+        - Key: Name
+          Value: codebar-public-c
+
+  # Public subnet route table associations
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetC
+      RouteTableId: !Ref PublicRouteTable
+
+  # Private subnets
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.24.0/21
+      AvailabilityZone: eu-west-2a
+      Tags:
+        - Key: Name
+          Value: codebar-private-a
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.32.0/21
+      AvailabilityZone: eu-west-2b
+      Tags:
+        - Key: Name
+          Value: codebar-private-b
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.40.0/21
+      AvailabilityZone: eu-west-2c
+      Tags:
+        - Key: Name
+          Value: UNUSED-codebar-private-c
+
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  PrivateRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayA
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  PrivateRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayB
+
+  # Public subnet route table associations
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTableA
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTableB
+
+  # Data subnets
+  DataSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.48.0/21
+      AvailabilityZone: eu-west-2a
+  DataSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.56.0/21
+      AvailabilityZone: eu-west-2b
+  DataSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.64.0/21
+      AvailabilityZone: eu-west-2c
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc
+      GroupDescription: Security group for Lambda functions
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc
+      GroupDescription: Security group for RDS
+  RdsSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt RdsSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !GetAtt LambdaSecurityGroup.GroupId
+  LambdaSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt LambdaSecurityGroup.GroupId
+      IpProtocol: -1
+      CidrIp: 0.0.0.0/0
+
+  AuroraPostgresClusterSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Aurora PostgreSQL cluster subnet group
+      SubnetIds:
+        - !Ref DataSubnetA
+        - !Ref DataSubnetB
+
+  AuroraPostgresCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: !Ref DatabaseClusterIdentifier
+      Engine: aurora-postgresql
+      EngineMode: provisioned
+      EngineVersion: 13.14
+      Port: 5432
+      AutoMinorVersionUpgrade: true
+      MasterUsername: !Ref DatabaseClusterMasterUsername
+      ManageMasterUserPassword: true
+      VpcSecurityGroupIds:
+        - !GetAtt RdsSecurityGroup.GroupId
+      BackupRetentionPeriod: 14
+      StorageEncrypted: true
+      DBSubnetGroupName: !Ref AuroraPostgresClusterSubnetGroup
+
+  AuroraPostgresInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: db.t4g.medium
+      DBClusterIdentifier: !Ref AuroraPostgresCluster
+      Engine: aurora-postgresql
+      EngineVersion: 13.14
+      PubliclyAccessible: false
+      AutoMinorVersionUpgrade: true
+      DBSubnetGroupName: !Ref AuroraPostgresClusterSubnetGroup
+
+  WebLambdaFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerContext: .
+      DockerTag: latest
+      Dockerfile: ./aws-lambda.Dockerfile
+    Properties:
+      PackageType: Image
+      Timeout: 28
+      MemorySize: 1770
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: AllAtOnce
+      Environment:
+        Variables:
+          RAILS_ENV: !Ref RailsEnv
+          RAILS_LOG_LEVEL: !Ref RailsLogLevel
+          SECRET_KEY_BASE: x-crypteia-ssm:/codebar/planner/application/secret-key-base
+          DB_HOST: !GetAtt AuroraPostgresCluster.Endpoint.Address
+          DB_USER: codebar_planner_app
+          DB_PASSWORD: x-crypteia-ssm:/codebar/planner/database/application-password
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt LambdaSecurityGroup.GroupId
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:Get*
+                - ssm:Describe*
+              Resource:
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/codebar/planner/*"
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+        Api:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
