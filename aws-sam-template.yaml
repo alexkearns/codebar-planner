@@ -274,7 +274,7 @@ Resources:
     Properties:
       PackageType: Image
       Timeout: 28
-      MemorySize: 1770
+      MemorySize: 1792
       AutoPublishAlias: live
       DeploymentPreference:
         Type: AllAtOnce
