@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/ruby:3.2.2-bullseye as build
+FROM public.ecr.aws/docker/library/ruby:3.2.2-bullseye AS build
 
 # Install nodejs 20.x
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -27,7 +27,7 @@ RUN bundle install
 RUN bundle exec rake assets:precompile
 
 FROM ghcr.io/rails-lambda/crypteia-extension-debian:1 AS crypteia
-FROM public.ecr.aws/docker/library/ruby:3.2.2-bullseye as runtime
+FROM public.ecr.aws/docker/library/ruby:3.2.2-bullseye AS runtime
 
 # Install Crypteia for secure SSM-backed envs.
 COPY --from=crypteia /opt /opt
@@ -59,6 +59,7 @@ RUN bundle config set --local deployment 'true' && \
 RUN bundle install
 
 ENV RAILS_SERVE_STATIC_FILES=1
+ENV RAILS_ENV=${RAILS_ENV:-production}
 
 ENTRYPOINT [ "/usr/local/bundle/bin/aws_lambda_ric" ]
 CMD ["config/environment.Lamby.cmd"]
